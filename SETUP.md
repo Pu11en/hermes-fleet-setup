@@ -155,13 +155,11 @@ You communicate clearly, admit uncertainty when appropriate, and prioritize
 being genuinely useful over being verbose unless otherwise directed.
 ```
 
-## Step 7: Per-Profile GitHub Auth (Optional)
+## Step 7: GitHub Auth — Shared vs Isolated (Optional)
 
-Each profile has its own `GH_CONFIG_DIR` at `~/.hermes/profiles/hermes-N/gh/`. This isolates `gh` credentials so one agent can't conflict with another.
+**Option A: Isolated (recommended if you want different GH identities per agent)**
 
-**Option A: Share one token across all agents**
-
-Create `~/.hermes/profiles/hermes-N/gh/hosts.yml` for each profile (all with the same token):
+Each profile gets its own `GH_CONFIG_DIR` at `~/.hermes/profiles/hermes-N/gh/`. Create `~/.hermes/profiles/hermes-N/gh/hosts.yml` for each:
 
 ```yaml
 version: "1"
@@ -174,13 +172,28 @@ github.com:
     oauth_token: gho_your_token_here
 ```
 
-**Option B: Use a different token per agent**
+Then set `GH_CONFIG_DIR=~/.hermes/profiles/hermes-N/gh` in that profile's `.env`.
 
-Generate 10 separate GitHub PATs and configure each profile's `hosts.yml` with a different token.
+**Option B: Shared (all agents use the same GH identity)**
+
+Put the token at `~/.hermes/gh/hosts.yml`:
+
+```yaml
+version: "1"
+github.com:
+    users:
+        YOUR_GITHUB_USERNAME:
+            oauth_token: gho_your_token_here
+    git_protocol: https
+    user: YOUR_GITHUB_USERNAME
+    oauth_token: gho_your_token_here
+```
+
+Then set `GH_CONFIG_DIR=~/.hermes/gh` in every profile's `.env`.
 
 **Option C: Skip GitHub auth entirely**
 
-Leave the `gh/` directory empty or with just:
+Leave the `gh/` directory empty with just:
 
 ```yaml
 version: "1"

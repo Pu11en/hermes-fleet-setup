@@ -141,19 +141,32 @@ ok "OpenRouter key set: $(mask_token "$OR_KEY")"
 # ============================================================================
 
 step "4" "GitHub Token (optional)"
-echo "  Each Hermes profile can have its own GitHub auth directory."
-echo "  You can skip this and share a single GitHub token across all agents,"
-echo "  or set per-profile tokens later."
+echo "  Each Hermes profile can have its own GitHub auth directory (isolated),"
+echo "  or all agents can share one GitHub identity (shared)."
 echo ""
 if [ "$GH_AVAILABLE" = true ]; then
-    read -p "  Enter a GitHub personal access token (or press Enter to skip): " -r GH_TOKEN
-    if [ -z "$GH_TOKEN" ]; then
+    echo "  [1] Isolated — each agent gets its own gh config (different identities possible)"
+    echo "  [2] Shared   — all agents share one gh config (same identity for all)"
+    echo "  [3] Skip     — don't configure GitHub auth at all"
+    echo ""
+    read -p "  Choose [1/2/3]: " -r GH_MODE
+    case "$GH_MODE" in
+        1) GH_MODE="isolated" ;;
+        2) GH_MODE="shared" ;;
+        *) GH_MODE="skip" ;;
+    esac
+
+    if [ "$GH_MODE" = "skip" ]; then
         GH_TOKEN=""
-        info "Skipping GitHub auth — agents won't be able to use gh natively"
     else
-        GH_TOKEN_SET=true
+        read -p "  Enter a GitHub personal access token: " -r GH_TOKEN
+        if [ -z "$GH_TOKEN" ]; then
+            GH_MODE="skip"
+            GH_TOKEN=""
+        fi
     fi
 else
+    GH_MODE="skip"
     GH_TOKEN=""
 fi
 
@@ -289,9 +302,13 @@ for i in $(seq 1 $PROFILE_COUNT); do
         hermes profile create "$PROFILE_NAME" 2>&1 || true
     fi
 
-    # Write .env with the correct token
+    # Write .env with the correct token and GH_CONFIG_DIR
     TOKEN="${TELEGRAM_TOKENS[$i]}"
     ENV_CONTENT=$(echo "$BASE_ENV" | sed "s/CHANGEME/$TOKEN/" | sed "s/hermes-N/$PROFILE_NAME/g")
+    # Override GH_CONFIG_DIR path for shared mode
+    if [ "$GH_MODE" = "shared" ]; then
+        ENV_CONTENT=$(echo "$ENV_CONTENT" | sed "s|hermes-N/gh|gh|g")
+    fi
     echo "$ENV_CONTENT" > "$PROFILE_DIR/.env"
 
     # Write config.yaml
@@ -300,31 +317,36 @@ for i in $(seq 1 $PROFILE_COUNT); do
     # Write SOUL.md
     echo "$BASE_SOUL" > "$PROFILE_DIR/SOUL.md"
 
-    # Create per-profile gh directory and auth
-    GH_DIR="$PROFILE_DIR/gh"
-    mkdir -p "$GH_DIR"
+    # Determine gh config directory for this profile
+    if [ "$GH_MODE" = "shared" ]; then
+        # All agents share one gh config at ~/.hermes/gh
+        GH_DIR="$HERMES_DIR/gh"
+        mkdir -p "$GH_DIR"
+        # Update .env to use the shared dir (need to fix the sed substitution below too)
+    elif [ "$GH_MODE" = "isolated" ]; then
+        GH_DIR="$PROFILE_DIR/gh"
+        mkdir -p "$GH_DIR"
+    else
+        GH_DIR="$PROFILE_DIR/gh"
+        mkdir -p "$GH_DIR"
+    fi
 
-    if [ -n "$GH_TOKEN" ] && [ "$GH_TOKEN_SET" = true ]; then
-        # Configure gh for this profile
-        GH_CONFIG_DIR="$GH_DIR" gh auth status &>/dev/null || \
-            echo "$GH_TOKEN" | GH_CONFIG_DIR="$GH_DIR" gh auth login --with-token 2>/dev/null || true
-
-        # Write hosts.yml for this profile
+    if [ "$GH_MODE" = "skip" ]; then
+        # Create empty gh config so gh doesn't complain
+        cat > "$GH_DIR/hosts.yml" << EOF
+version: "1"
+EOF
+    elif [ -n "$GH_TOKEN" ]; then
+        GH_USER=$(GH_CONFIG_DIR="$GH_DIR" gh api user --jq '.login' 2>/dev/null || echo "user")
         cat > "$GH_DIR/hosts.yml" << EOF
 version: "1"
 github.com:
     users:
-        $(gh api user --jq '.login' 2>/dev/null || echo "user"):
+        $GH_USER:
             oauth_token: $GH_TOKEN
     git_protocol: https
-    user: $(gh api user --jq '.login' 2>/dev/null || echo "user")
+    user: $GH_USER
     oauth_token: $GH_TOKEN
-EOF
-        ok "$PROFILE_NAME: gh auth configured"
-    else
-        # Create empty gh config
-        cat > "$GH_DIR/hosts.yml" << EOF
-version: "1"
 EOF
     fi
 

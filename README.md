@@ -7,7 +7,7 @@ Run 10 isolated Telegram bots powered by Hermes Agent — each with its own prof
 - **10 separate Telegram bots** that each run `hermes profile`
 - Each bot has its own **isolated profile** (`hermes-1` through `hermes-10`)
 - Each profile has its own **skills, memory, and session history**
-- Per-profile **GitHub auth** so you can use `gh` inside any agent without conflicts
+- Per-profile **GitHub auth** — choose isolated (each agent has its own gh identity) or shared (all agents share one gh identity)
 - **Shared `OPENROUTER_API_KEY`** so all agents can talk to the same LLM backend
 
 ## Prerequisites
@@ -73,9 +73,15 @@ hermes status
 │   ...                ← (and so on for all 10)
 ```
 
-## Per-Profile GitHub Auth
+## GitHub Auth: Shared vs Isolated
 
-Each Hermes profile has its own `GH_CONFIG_DIR` pointing to `~/.hermes/profiles/hermes-N/gh/`. This means each agent can have a different GitHub identity — or they can all share the same token. The `gh` CLI inside any agent uses the profile's own credentials, so there are no auth conflicts.
+During setup you choose:
+
+- **Isolated** — each agent gets its own `GH_CONFIG_DIR` at `~/.hermes/profiles/hermes-N/gh/`. Agents can have different GitHub identities. No auth conflicts between agents.
+- **Shared** — all agents share one `GH_CONFIG_DIR` at `~/.hermes/gh/`. All agents use the same GitHub identity. Simpler if you just want one GH identity across the fleet.
+- **Skip** — no GitHub auth configured at all. Agents simply won't be able to use `gh` natively.
+
+The `gh` CLI inside any agent picks up its profile's credentials automatically via the `GH_CONFIG_DIR` env var set in each profile's `.env`.
 
 ## Customization
 
